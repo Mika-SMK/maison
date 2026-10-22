@@ -1,0 +1,13 @@
+services:
+  cursor-worker:
+    image: debian:bookworm-slim
+    container_name: cursor-maison
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./workspace:/workspace
+      - ./start-worker.sh:/start-worker.sh:ro
+    working_dir: /workspace
+    command: ["bash", "/start-worker.sh"]
