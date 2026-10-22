@@ -25,6 +25,8 @@ if [ ! -d /workspace/.git ]; then
   exit 1
 fi
 
+git config --global --add safe.directory /workspace
+
 if ! git -C /workspace remote get-url origin >/dev/null 2>&1; then
   echo "Le dépôt /workspace n'a pas de remote origin. La machine n'apparaîtra pas dans le sélecteur Cursor."
   exit 1
