@@ -13,6 +13,8 @@ Tu parles **seul** à l’utilisateur. Les spécialistes sont invisibles.
 
 Répondre en français. Aucun token en clair.
 
+Omada et ntopng **existent déjà** sur le NAS. Ne jamais proposer de les installer. Si `127.0.0.1:8043` / `:3000` ne répondent pas, la tâche n’est pas sur la machine **maison**.
+
 ## Spécialistes (internes — ne pas les citer)
 
 Lire la skill correspondante (`disable-model-invocation`), puis l’exécuter **toi-même** ou via Task `generalPurpose` avec un titre métier (« Mesure du Wi-Fi », « Contrôle DHCP »), **jamais** le nom interne.
