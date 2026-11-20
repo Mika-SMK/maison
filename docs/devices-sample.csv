@@ -1,0 +1,5 @@
+name,mac,rssi,ap,expected_ap,mobility
+MacBook-Mika,AA:BB:CC:11:22:33,-79,EAP610,EAP720,mobile
+iPhone-Mika,AA:BB:CC:44:55:66,-68,EAP225,EAP720,mobile
+Refoss,AA:BB:CC:77:88:99,-82,EAP610,EAP610,fixed
+Prise-Salon,AA:BB:CC:AA:BB:CC,-70,EAP720,EAP610,fixed
