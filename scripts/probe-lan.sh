@@ -7,8 +7,9 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPORT_DIR_DEFAULT="${ROOT_DIR}/.maison-reports"
 
 RETENTION_DAYS=7
+MAX_PAGE_SIZE=50
 PAGE=1
-PAGE_SIZE=12
+PAGE_SIZE=20
 DEVICES_FILE=""
 AUTO_HEAL_MOBILE=0
 REPORT_DIR="${REPORT_DIR_DEFAULT}"
@@ -30,7 +31,7 @@ Options:
                                 name,mac,rssi,ap,expected_ap,mobility
                                 mobility optionnel: mobile|fixed
   --page <n>                    Numero de page (defaut: 1)
-  --page-size <n>               Lignes par page (defaut: 12)
+  --page-size <n>               Lignes par page (defaut: 20, max: 50)
   --report-dir <path>           Dossier de stockage du rapport
   --auto-heal-mobile            Tente de deconnecter les mobiles en signal faible
   --mobile-disconnect-cmd <cmd> Commande a executer pour deconnecter:
@@ -442,8 +443,8 @@ parse_args() {
     echo "Erreur: --page doit etre un entier >= 1." >&2
     exit 64
   fi
-  if ! [[ "${PAGE_SIZE}" =~ ^[0-9]+$ ]] || (( PAGE_SIZE < 1 )); then
-    echo "Erreur: --page-size doit etre un entier >= 1." >&2
+  if ! [[ "${PAGE_SIZE}" =~ ^[0-9]+$ ]] || (( PAGE_SIZE < 1 || PAGE_SIZE > MAX_PAGE_SIZE )); then
+    echo "Erreur: --page-size doit etre un entier entre 1 et ${MAX_PAGE_SIZE}." >&2
     exit 64
   fi
 }

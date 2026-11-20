@@ -15,12 +15,13 @@ Le script `scripts/probe-lan.sh` produit un rapport tabulaire pagine avec retent
 scripts/probe-lan.sh \
   --devices-file docs/devices-sample.csv \
   --page 1 \
-  --page-size 12
+  --page-size 20
 ```
 
 Options principales:
 
 - `--devices-file <path>`: CSV device (voir format plus bas).
+- `--page-size <n>`: nombre de lignes par page (defaut `20`, maximum `50`).
 - `--report-dir <path>`: dossier de persistance (defaut: `.maison-reports`).
 - `--auto-heal-mobile`: active la tentative de reconnexion automatique des mobiles en signal faible.
 - `--mobile-disconnect-cmd <cmd>`: commande appelee avec `"<cmd> <mac> <name>"`.
