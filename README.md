@@ -29,4 +29,5 @@ Fichier `.env` **sur le NAS**, à partir de `.env.example`. Jamais dans git.
 
 - `AGENTS.md` — identité et interdits
 - `docs/acces-distant.md` — comment viser la machine maison
+- `docs/rapports-reseau.md` — rapport LAN pagine (7 jours glissants) et logique mobile/fixe
 - `.cursor/skills/` — playbooks internes
