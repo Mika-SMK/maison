@@ -6,10 +6,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPORT_DIR_DEFAULT="${ROOT_DIR}/.maison-reports"
 
+SCRIPT_VERSION="2.1.0"
 RETENTION_DAYS=7
 MAX_PAGE_SIZE=50
+DEFAULT_PAGE_SIZE=20
 PAGE=1
-PAGE_SIZE=20
+PAGE_SIZE="${DEFAULT_PAGE_SIZE}"
 DEVICES_FILE=""
 AUTO_HEAL_MOBILE=0
 REPORT_DIR="${REPORT_DIR_DEFAULT}"
@@ -20,6 +22,7 @@ CURRENT_INFO=0
 CURRENT_WARN=0
 CURRENT_ERROR=0
 CURRENT_CRITICAL=0
+QUALITY_ALERTS=()
 
 usage() {
   cat <<'USAGE'
@@ -36,6 +39,7 @@ Options:
   --auto-heal-mobile            Tente de deconnecter les mobiles en signal faible
   --mobile-disconnect-cmd <cmd> Commande a executer pour deconnecter:
                                 <cmd> <mac> <name>
+  --version                     Afficher la version du rapport
   -h, --help                    Afficher cette aide
 USAGE
 }
@@ -193,6 +197,30 @@ infer_mobility() {
   esac
 }
 
+register_quality_alert() {
+  local device_name="$1"
+  local mobility="$2"
+  local rssi="$3"
+  local severity="$4"
+  QUALITY_ALERTS+=("${device_name}|${mobility}|${rssi}|${severity}")
+}
+
+print_quality_alerts() {
+  local count="${#QUALITY_ALERTS[@]}"
+  echo
+  echo "Alertes qualite (device / type):"
+  if (( count == 0 )); then
+    echo "- Aucune alerte qualite sur cette execution."
+    return
+  fi
+
+  local item device_name mobility rssi severity
+  for item in "${QUALITY_ALERTS[@]}"; do
+    IFS='|' read -r device_name mobility rssi severity <<<"${item}"
+    printf -- '- %s [%s] RSSI=%s dBm (%s)\n' "${device_name}" "${mobility}" "${rssi}" "${severity}"
+  done
+}
+
 attempt_mobile_reconnect() {
   local epoch="$1"
   local iso_utc="$2"
@@ -301,8 +329,8 @@ analyze_devices_file() {
     # Qualite RSSI et action auto-heal pour mobile en souffrance.
     if [[ ! "${rssi}" =~ ^-?[0-9]+$ ]]; then
       append_event "${epoch}" "${iso_utc}" "quality" "${name}" \
-        "missing-rssi" "WARN" \
-        "RSSI absent ou invalide (${rssi:-vide})" \
+        "missing-rssi-${inferred_mobility}" "WARN" \
+        "RSSI absent/invalide (${rssi:-vide}) pour device ${inferred_mobility}" \
         "Verifier la collecte Omada"
       continue
     fi
@@ -310,36 +338,39 @@ analyze_devices_file() {
     if (( rssi >= -65 )); then
       quality="good"
       severity="OK"
-      status="quality-good"
-      details="RSSI ${rssi} dBm (bon)"
+      status="quality-good-${inferred_mobility}"
+      details="RSSI ${rssi} dBm (bon) - device ${inferred_mobility}"
       action="-"
     elif (( rssi >= -75 )); then
       quality="fair"
-      status="quality-fair"
+      status="quality-fair-${inferred_mobility}"
       if [[ "${inferred_mobility}" == "mobile" ]]; then
         severity="INFO"
-        details="RSSI ${rssi} dBm (moyen, mobile)"
+        details="RSSI ${rssi} dBm (moyen) - device mobile"
         action="Observer la tendance"
       else
         severity="WARN"
-        details="RSSI ${rssi} dBm (moyen, fixe)"
+        details="RSSI ${rssi} dBm (moyen) - device fixe"
         action="Verifier position/AP"
       fi
     else
       quality="poor"
-      status="quality-poor"
+      status="quality-poor-${inferred_mobility}"
       if [[ "${inferred_mobility}" == "mobile" ]]; then
         severity="WARN"
-        details="RSSI ${rssi} dBm (faible, mobile)"
+        details="RSSI ${rssi} dBm (faible) - device mobile"
         action="Tentative de reconnexion possible"
       else
         severity="CRITICAL"
-        details="RSSI ${rssi} dBm (faible, fixe)"
+        details="RSSI ${rssi} dBm (faible) - device fixe"
         action="Corriger couverture/AP prioritairement"
       fi
     fi
 
     append_event "${epoch}" "${iso_utc}" "quality" "${name}" "${status}" "${severity}" "${details}" "${action}"
+    if [[ "${severity}" == "WARN" || "${severity}" == "CRITICAL" ]]; then
+      register_quality_alert "${name}" "${inferred_mobility}" "${rssi}" "${severity}"
+    fi
 
     if [[ "${quality}" == "poor" && "${inferred_mobility}" == "mobile" ]]; then
       attempt_mobile_reconnect "${epoch}" "${iso_utc}" "${name}" "${mac}"
@@ -382,20 +413,20 @@ render_table() {
     "$(date -u -d "@${min_epoch}" '+%Y-%m-%d %H:%M:%S')" \
     "$(date -u -d "@${now_epoch}" '+%Y-%m-%d %H:%M:%S')"
   echo
-  printf '%-19s | %-11s | %-18s | %-16s | %-8s | %-40s | %-34s\n' "Timestamp (UTC)" "Scope" "Entite" "Statut" "Niveau" "Details" "Action"
-  printf '%s\n' "--------------------+-------------+--------------------+------------------+----------+------------------------------------------+------------------------------------"
+  printf '%-19s | %-11s | %-24s | %-22s | %-8s | %-48s | %-34s\n' "Timestamp (UTC)" "Scope" "Entite" "Statut" "Niveau" "Details" "Action"
+  printf '%s\n' "--------------------+-------------+--------------------------+------------------------+----------+--------------------------------------------------+------------------------------------"
 
   local i
   for (( i = start_idx; i < end_idx; i++ )); do
     local epoch iso_utc scope entity status severity details action
     IFS=$'\t' read -r epoch iso_utc scope entity status severity details action <<<"${rows[$i]}"
-    printf '%-19s | %-11s | %-18s | %-16s | %-8s | %-40s | %-34s\n' \
+    printf '%-19s | %-11s | %-24s | %-22s | %-8s | %-48s | %-34s\n' \
       "$(truncate_field "${iso_utc}" 19)" \
       "$(truncate_field "${scope}" 11)" \
-      "$(truncate_field "${entity}" 18)" \
-      "$(truncate_field "${status}" 16)" \
+      "$(truncate_field "${entity}" 24)" \
+      "$(truncate_field "${status}" 22)" \
       "$(truncate_field "${severity}" 8)" \
-      "$(truncate_field "${details}" 40)" \
+      "$(truncate_field "${details}" 48)" \
       "$(truncate_field "${action}" 34)"
   done
 }
@@ -426,6 +457,10 @@ parse_args() {
       --mobile-disconnect-cmd)
         MOBILE_DISCONNECT_CMD="${2:-}"
         shift 2
+        ;;
+      --version)
+        echo "probe-lan version ${SCRIPT_VERSION}"
+        exit 0
         ;;
       -h|--help)
         usage
@@ -463,6 +498,7 @@ main() {
   echo "host=$(hostname) kernel=$(uname -r)"
   echo "collecte_utc=${now_iso}"
   echo "retention=${RETENTION_DAYS}j report_dir=${REPORT_DIR}"
+  echo "report_version=${SCRIPT_VERSION} pagination_default=${DEFAULT_PAGE_SIZE} pagination_max=${MAX_PAGE_SIZE}"
 
   probe_service "${now_epoch}" "${now_iso}" "omada" "https://127.0.0.1:8043/"
   probe_service "${now_epoch}" "${now_iso}" "ntopng" "http://127.0.0.1:3000/"
@@ -475,6 +511,7 @@ main() {
 
   prune_history "${min_epoch}"
   render_table "${now_epoch}" "${min_epoch}"
+  print_quality_alerts
 
   echo
   printf 'Resume execution courante: OK=%d INFO=%d WARN=%d ERROR=%d CRITICAL=%d\n' \

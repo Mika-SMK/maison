@@ -25,6 +25,13 @@ Options principales:
 - `--report-dir <path>`: dossier de persistance (defaut: `.maison-reports`).
 - `--auto-heal-mobile`: active la tentative de reconnexion automatique des mobiles en signal faible.
 - `--mobile-disconnect-cmd <cmd>`: commande appelee avec `"<cmd> <mac> <name>"`.
+- `--version`: affiche la version du script de rapport.
+
+Chaque execution affiche aussi une ligne de version directement dans la sortie:
+
+```text
+report_version=2.1.0 pagination_default=20 pagination_max=50
+```
 
 ## Format CSV devices
 
@@ -53,6 +60,18 @@ name,mac,rssi,ap,expected_ap,mobility
 - `>= -65`: `quality-good` (OK)
 - `-66` a `-75`: `quality-fair` (INFO mobile / WARN fixe)
 - `< -75`: `quality-poor` (WARN mobile / CRITICAL fixe)
+
+Les statuts de qualite incluent maintenant le type de device:
+
+- `quality-...-mobile`
+- `quality-...-fixed`
+
+Et un bloc dedie est affiche apres le tableau:
+
+```text
+Alertes qualite (device / type):
+- MacBook [mobile] RSSI=-79 dBm (WARN)
+```
 
 ### Auto-heal mobile
 
