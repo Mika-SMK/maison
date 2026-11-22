@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPORT_DIR_DEFAULT="${ROOT_DIR}/.maison-reports"
 
-SCRIPT_VERSION="2.1.0"
+SCRIPT_VERSION="2.2.0"
 RETENTION_DAYS=7
 MAX_PAGE_SIZE=50
 DEFAULT_PAGE_SIZE=20
@@ -202,7 +202,8 @@ register_quality_alert() {
   local mobility="$2"
   local rssi="$3"
   local severity="$4"
-  QUALITY_ALERTS+=("${device_name}|${mobility}|${rssi}|${severity}")
+  local status="$5"
+  QUALITY_ALERTS+=("${device_name}|${mobility}|${rssi}|${severity}|${status}")
 }
 
 print_quality_alerts() {
@@ -214,11 +215,44 @@ print_quality_alerts() {
     return
   fi
 
-  local item device_name mobility rssi severity
+  local item device_name mobility rssi severity status
   for item in "${QUALITY_ALERTS[@]}"; do
-    IFS='|' read -r device_name mobility rssi severity <<<"${item}"
-    printf -- '- %s [%s] RSSI=%s dBm (%s)\n' "${device_name}" "${mobility}" "${rssi}" "${severity}"
+    IFS='|' read -r device_name mobility rssi severity status <<<"${item}"
+    printf -- '- %s [%s] RSSI=%s dBm (%s, %s)\n' "${device_name}" "${mobility}" "${rssi}" "${severity}" "${status}"
   done
+}
+
+print_correction_guidance() {
+  local count="${#QUALITY_ALERTS[@]}"
+  local mobile_reconnect=0
+  local fixed_investigate=0
+
+  echo
+  echo "Plan de correction (decision mobile/fixe):"
+  if (( count == 0 )); then
+    echo "- Aucun device en alerte qualite a corriger."
+    return
+  fi
+
+  local item device_name mobility rssi severity status
+  for item in "${QUALITY_ALERTS[@]}"; do
+    IFS='|' read -r device_name mobility rssi severity status <<<"${item}"
+    if [[ "${mobility}" == "mobile" ]]; then
+      ((mobile_reconnect += 1))
+      printf -- '- %s [%s] -> action: FORCER_RECONNEXION (deconnexion puis reassociation auto)\n' "${device_name}" "${mobility}"
+      continue
+    fi
+
+    ((fixed_investigate += 1))
+    if [[ "${status}" == "quality-poor-fixed" ]]; then
+      printf -- '- %s [%s] -> action: INVESTIGATION_FIXE_PRIORITAIRE (couverture/AP/canal/interferences)\n' "${device_name}" "${mobility}"
+    else
+      printf -- '- %s [%s] -> action: INVESTIGATION_FIXE (positionnement / borne / bruit radio)\n' "${device_name}" "${mobility}"
+    fi
+  done
+
+  echo
+  printf 'Resume correction: mobiles_a_reconnecter=%d fixes_a_investiguer=%d\n' "${mobile_reconnect}" "${fixed_investigate}"
 }
 
 attempt_mobile_reconnect() {
@@ -369,7 +403,7 @@ analyze_devices_file() {
 
     append_event "${epoch}" "${iso_utc}" "quality" "${name}" "${status}" "${severity}" "${details}" "${action}"
     if [[ "${severity}" == "WARN" || "${severity}" == "CRITICAL" ]]; then
-      register_quality_alert "${name}" "${inferred_mobility}" "${rssi}" "${severity}"
+      register_quality_alert "${name}" "${inferred_mobility}" "${rssi}" "${severity}" "${status}"
     fi
 
     if [[ "${quality}" == "poor" && "${inferred_mobility}" == "mobile" ]]; then
@@ -512,6 +546,7 @@ main() {
   prune_history "${min_epoch}"
   render_table "${now_epoch}" "${min_epoch}"
   print_quality_alerts
+  print_correction_guidance
 
   echo
   printf 'Resume execution courante: OK=%d INFO=%d WARN=%d ERROR=%d CRITICAL=%d\n' \

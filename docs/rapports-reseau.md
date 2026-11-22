@@ -30,7 +30,7 @@ Options principales:
 Chaque execution affiche aussi une ligne de version directement dans la sortie:
 
 ```text
-report_version=2.1.0 pagination_default=20 pagination_max=50
+report_version=2.2.0 pagination_default=20 pagination_max=50
 ```
 
 ## Format CSV devices
@@ -71,6 +71,14 @@ Et un bloc dedie est affiche apres le tableau:
 ```text
 Alertes qualite (device / type):
 - MacBook [mobile] RSSI=-79 dBm (WARN)
+```
+
+Un second bloc donne la decision de correction:
+
+```text
+Plan de correction (decision mobile/fixe):
+- MacBook [mobile] -> action: FORCER_RECONNEXION (deconnexion puis reassociation auto)
+- Refoss [fixed] -> action: INVESTIGATION_FIXE_PRIORITAIRE (couverture/AP/canal/interferences)
 ```
 
 ### Auto-heal mobile
