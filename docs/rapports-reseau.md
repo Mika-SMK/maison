@@ -34,10 +34,25 @@ Variables d'environnement Telegram:
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID`
 
+Version de deploiement:
+
+- Le fichier `DEPLOY_VERSION` porte le numero de deploiement visible dans les rapports.
+- Incrementation manuelle:
+
+```bash
+scripts/bump-deploy-version.sh
+```
+
+- Verification:
+
+```bash
+scripts/probe-lan.sh --version
+```
+
 Chaque execution affiche aussi une ligne de version directement dans la sortie:
 
 ```text
-report_version=2.3.0 pagination_default=20 pagination_max=50
+report_version=2.4.0 deploy_version=1 pagination_default=20 pagination_max=50
 ```
 
 ## Format CSV devices
@@ -88,7 +103,7 @@ Plan de correction (decision mobile/fixe):
 - Refoss [fixed] -> action: INVESTIGATION_FIXE_PRIORITAIRE (couverture/AP/canal/interferences)
 ```
 
-Le message Telegram reprend la meme logique:
+Le message Telegram reprend la meme logique (y compris `deploy_version`):
 
 - nom du device,
 - type `[mobile]` ou `[fixed]`,

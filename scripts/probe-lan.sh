@@ -5,8 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPORT_DIR_DEFAULT="${ROOT_DIR}/.maison-reports"
+DEPLOY_VERSION_FILE="${ROOT_DIR}/DEPLOY_VERSION"
 
-SCRIPT_VERSION="2.3.0"
+SCRIPT_VERSION="2.4.0"
 RETENTION_DAYS=7
 MAX_PAGE_SIZE=50
 DEFAULT_PAGE_SIZE=20
@@ -19,6 +20,7 @@ MOBILE_DISCONNECT_CMD="${MOBILE_DISCONNECT_CMD:-}"
 TELEGRAM_SEND=0
 TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+DEPLOY_VERSION="dev-unset"
 
 CURRENT_OK=0
 CURRENT_INFO=0
@@ -47,6 +49,17 @@ Options:
   --version                     Afficher la version du rapport
   -h, --help                    Afficher cette aide
 USAGE
+}
+
+load_deploy_version() {
+  if [[ -f "${DEPLOY_VERSION_FILE}" ]]; then
+    DEPLOY_VERSION="$(tr -d '\r\n' <"${DEPLOY_VERSION_FILE}")"
+    if [[ -z "${DEPLOY_VERSION}" ]]; then
+      DEPLOY_VERSION="dev-empty"
+    fi
+    return
+  fi
+  DEPLOY_VERSION="dev-missing"
 }
 
 trim() {
@@ -282,7 +295,7 @@ build_telegram_message() {
   local mobile_reconnect=0
   local fixed_investigate=0
 
-  message+="Maison - rapport reseau v${SCRIPT_VERSION}"$'\n'
+  message+="Maison - rapport reseau v${SCRIPT_VERSION} (deploy ${DEPLOY_VERSION})"$'\n'
   message+="Pagination: defaut=${DEFAULT_PAGE_SIZE}, max=${MAX_PAGE_SIZE}"$'\n'
   message+="Retention: ${RETENTION_DAYS} jours glissants"$'\n'
 
@@ -593,7 +606,8 @@ parse_args() {
         shift 2
         ;;
       --version)
-        echo "probe-lan version ${SCRIPT_VERSION}"
+        load_deploy_version
+        echo "probe-lan version ${SCRIPT_VERSION} (deploy ${DEPLOY_VERSION})"
         exit 0
         ;;
       -h|--help)
@@ -620,6 +634,7 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  load_deploy_version
 
   local now_epoch now_iso min_epoch
   now_epoch="$(date -u +%s)"
@@ -632,7 +647,7 @@ main() {
   echo "host=$(hostname) kernel=$(uname -r)"
   echo "collecte_utc=${now_iso}"
   echo "retention=${RETENTION_DAYS}j report_dir=${REPORT_DIR}"
-  echo "report_version=${SCRIPT_VERSION} pagination_default=${DEFAULT_PAGE_SIZE} pagination_max=${MAX_PAGE_SIZE}"
+  echo "report_version=${SCRIPT_VERSION} deploy_version=${DEPLOY_VERSION} pagination_default=${DEFAULT_PAGE_SIZE} pagination_max=${MAX_PAGE_SIZE}"
 
   probe_service "${now_epoch}" "${now_iso}" "omada" "https://127.0.0.1:8043/"
   probe_service "${now_epoch}" "${now_iso}" "ntopng" "http://127.0.0.1:3000/"
