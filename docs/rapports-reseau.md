@@ -25,12 +25,19 @@ Options principales:
 - `--report-dir <path>`: dossier de persistance (defaut: `.maison-reports`).
 - `--auto-heal-mobile`: active la tentative de reconnexion automatique des mobiles en signal faible.
 - `--mobile-disconnect-cmd <cmd>`: commande appelee avec `"<cmd> <mac> <name>"`.
+- `--telegram-send`: envoie un resume des alertes qualite sur Telegram.
+- `--telegram-chat-id <id>`: surcharge `TELEGRAM_CHAT_ID` a l'execution.
 - `--version`: affiche la version du script de rapport.
+
+Variables d'environnement Telegram:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
 
 Chaque execution affiche aussi une ligne de version directement dans la sortie:
 
 ```text
-report_version=2.2.0 pagination_default=20 pagination_max=50
+report_version=2.3.0 pagination_default=20 pagination_max=50
 ```
 
 ## Format CSV devices
@@ -80,6 +87,13 @@ Plan de correction (decision mobile/fixe):
 - MacBook [mobile] -> action: FORCER_RECONNEXION (deconnexion puis reassociation auto)
 - Refoss [fixed] -> action: INVESTIGATION_FIXE_PRIORITAIRE (couverture/AP/canal/interferences)
 ```
+
+Le message Telegram reprend la meme logique:
+
+- nom du device,
+- type `[mobile]` ou `[fixed]`,
+- RSSI et severite,
+- action dediee (`FORCER_RECONNEXION` ou `INVESTIGATION_FIXE*`).
 
 ### Auto-heal mobile
 

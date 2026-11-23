@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPORT_DIR_DEFAULT="${ROOT_DIR}/.maison-reports"
 
-SCRIPT_VERSION="2.2.0"
+SCRIPT_VERSION="2.3.0"
 RETENTION_DAYS=7
 MAX_PAGE_SIZE=50
 DEFAULT_PAGE_SIZE=20
@@ -16,6 +16,9 @@ DEVICES_FILE=""
 AUTO_HEAL_MOBILE=0
 REPORT_DIR="${REPORT_DIR_DEFAULT}"
 MOBILE_DISCONNECT_CMD="${MOBILE_DISCONNECT_CMD:-}"
+TELEGRAM_SEND=0
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 
 CURRENT_OK=0
 CURRENT_INFO=0
@@ -39,6 +42,8 @@ Options:
   --auto-heal-mobile            Tente de deconnecter les mobiles en signal faible
   --mobile-disconnect-cmd <cmd> Commande a executer pour deconnecter:
                                 <cmd> <mac> <name>
+  --telegram-send               Envoie un resume d'alertes sur Telegram
+  --telegram-chat-id <id>       Chat ID Telegram (sinon TELEGRAM_CHAT_ID)
   --version                     Afficher la version du rapport
   -h, --help                    Afficher cette aide
 USAGE
@@ -222,6 +227,21 @@ print_quality_alerts() {
   done
 }
 
+correction_action_for_alert() {
+  local mobility="$1"
+  local status="$2"
+  if [[ "${mobility}" == "mobile" ]]; then
+    printf 'FORCER_RECONNEXION'
+    return
+  fi
+
+  if [[ "${status}" == "quality-poor-fixed" ]]; then
+    printf 'INVESTIGATION_FIXE_PRIORITAIRE'
+  else
+    printf 'INVESTIGATION_FIXE'
+  fi
+}
+
 print_correction_guidance() {
   local count="${#QUALITY_ALERTS[@]}"
   local mobile_reconnect=0
@@ -237,22 +257,94 @@ print_correction_guidance() {
   local item device_name mobility rssi severity status
   for item in "${QUALITY_ALERTS[@]}"; do
     IFS='|' read -r device_name mobility rssi severity status <<<"${item}"
+    local action_label
+    action_label="$(correction_action_for_alert "${mobility}" "${status}")"
     if [[ "${mobility}" == "mobile" ]]; then
       ((mobile_reconnect += 1))
-      printf -- '- %s [%s] -> action: FORCER_RECONNEXION (deconnexion puis reassociation auto)\n' "${device_name}" "${mobility}"
+      printf -- '- %s [%s] -> action: %s (deconnexion puis reassociation auto)\n' "${device_name}" "${mobility}" "${action_label}"
       continue
     fi
 
     ((fixed_investigate += 1))
-    if [[ "${status}" == "quality-poor-fixed" ]]; then
-      printf -- '- %s [%s] -> action: INVESTIGATION_FIXE_PRIORITAIRE (couverture/AP/canal/interferences)\n' "${device_name}" "${mobility}"
+    if [[ "${action_label}" == "INVESTIGATION_FIXE_PRIORITAIRE" ]]; then
+      printf -- '- %s [%s] -> action: %s (couverture/AP/canal/interferences)\n' "${device_name}" "${mobility}" "${action_label}"
     else
-      printf -- '- %s [%s] -> action: INVESTIGATION_FIXE (positionnement / borne / bruit radio)\n' "${device_name}" "${mobility}"
+      printf -- '- %s [%s] -> action: %s (positionnement / borne / bruit radio)\n' "${device_name}" "${mobility}" "${action_label}"
     fi
   done
 
   echo
   printf 'Resume correction: mobiles_a_reconnecter=%d fixes_a_investiguer=%d\n' "${mobile_reconnect}" "${fixed_investigate}"
+}
+
+build_telegram_message() {
+  local message=""
+  local mobile_reconnect=0
+  local fixed_investigate=0
+
+  message+="Maison - rapport reseau v${SCRIPT_VERSION}"$'\n'
+  message+="Pagination: defaut=${DEFAULT_PAGE_SIZE}, max=${MAX_PAGE_SIZE}"$'\n'
+  message+="Retention: ${RETENTION_DAYS} jours glissants"$'\n'
+
+  if (( ${#QUALITY_ALERTS[@]} == 0 )); then
+    message+="Alerte qualite: aucune."$'\n'
+    printf '%s' "${message}"
+    return
+  fi
+
+  message+="Alertes qualite:"$'\n'
+  local item device_name mobility rssi severity status action_label
+  for item in "${QUALITY_ALERTS[@]}"; do
+    IFS='|' read -r device_name mobility rssi severity status <<<"${item}"
+    action_label="$(correction_action_for_alert "${mobility}" "${status}")"
+    if [[ "${mobility}" == "mobile" ]]; then
+      ((mobile_reconnect += 1))
+    else
+      ((fixed_investigate += 1))
+    fi
+    message+="- ${device_name} [${mobility}] RSSI=${rssi} dBm (${severity}) -> ${action_label}"$'\n'
+  done
+
+  message+="Resume correction: mobiles_a_reconnecter=${mobile_reconnect}, fixes_a_investiguer=${fixed_investigate}"$'\n'
+  printf '%s' "${message}"
+}
+
+send_telegram_notification() {
+  local epoch="$1"
+  local iso_utc="$2"
+  if (( TELEGRAM_SEND == 0 )); then
+    return
+  fi
+
+  if [[ -z "${TELEGRAM_CHAT_ID}" || -z "${TELEGRAM_BOT_TOKEN}" ]]; then
+    append_event "${epoch}" "${iso_utc}" "notification" "telegram" \
+      "telegram-misconfigured" "WARN" \
+      "Envoi Telegram demande mais TELEGRAM_CHAT_ID/TELEGRAM_BOT_TOKEN manquant" \
+      "Renseigner les variables d'environnement Telegram"
+    return
+  fi
+
+  local telegram_message response
+  telegram_message="$(build_telegram_message)"
+  response="$(
+    curl -sS --max-time 12 -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=${telegram_message}" \
+      --data-urlencode "disable_web_page_preview=true" || true
+  )"
+
+  if [[ "${response}" == *'"ok":true'* ]]; then
+    append_event "${epoch}" "${iso_utc}" "notification" "telegram" \
+      "telegram-sent" "INFO" \
+      "Notification Telegram envoyee" \
+      "-"
+    return
+  fi
+
+  append_event "${epoch}" "${iso_utc}" "notification" "telegram" \
+    "telegram-failed" "ERROR" \
+    "Echec de l'envoi Telegram (reponse API non valide)" \
+    "Verifier token, chat id et acces sortant"
 }
 
 attempt_mobile_reconnect() {
@@ -492,6 +584,14 @@ parse_args() {
         MOBILE_DISCONNECT_CMD="${2:-}"
         shift 2
         ;;
+      --telegram-send)
+        TELEGRAM_SEND=1
+        shift
+        ;;
+      --telegram-chat-id)
+        TELEGRAM_CHAT_ID="${2:-}"
+        shift 2
+        ;;
       --version)
         echo "probe-lan version ${SCRIPT_VERSION}"
         exit 0
@@ -542,6 +642,8 @@ main() {
   if [[ -n "${DEVICES_FILE}" ]]; then
     analyze_devices_file "${now_epoch}" "${now_iso}" "${DEVICES_FILE}"
   fi
+
+  send_telegram_notification "${now_epoch}" "${now_iso}"
 
   prune_history "${min_epoch}"
   render_table "${now_epoch}" "${min_epoch}"
